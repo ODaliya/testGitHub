@@ -1,0 +1,49 @@
+
+	
+	
+--404流程
+
+
+遍历HandlerMappings,
+
+首先直接找直接匹配的url，得到RequestMappingInfo，然后根据小范围RequestMappingInfo，得到HandlerMethod
+如果没有匹配的RequestMappingInfo，遍历所有RequestMappingInfo，找HandlerMethod
+
+
+RequestMappingHandlerMapping 找HandlerMethod，找不到会判断是否是 非pattern条件，如consume、produce条件引起，
+如果是，那么抛出异常，会让DefaultHandlerExceptionResolver处理，显示不一样的404
+
+否则，返回null，然后判断是否有默认的handler，没有的话，会判断throwExceptionIfNoHandlerFound是否需要抛异常，
+如果抛异常，就抛出NoHandlerFoundException，交由DefaultHandlerExceptionResolver处理_1
+
+DefaultHandlerExceptionResolver是否能处理，
+如果handler不为null，会判断mappedHandlers、mappedHandlerClasses属性是否有配置相应的handler的class，如果有则可以处理
+如果handler为null，则会判断是否mappedHandlers、mappedHandlerClasses这俩属性为空，为空则可以处理
+
+
+判断是否阻止缓存，如果阻止，会response.addHeader(HEADER_CACHE_CONTROL, "no-store") 响应头里面写入Cache-Control：no-store
+
+如果不抛，就response.sendError(HttpServletResponse.SC_NOT_FOUND)，交由servlet容器处理，并返回页面
+
+
+_1处也是sendError，但是返回ModelAndView是空页面吗？可以探究
+探究结果，判断view是null，model是null，则返回视图是null
+如果view是null，model不为null，则返回视图，view名字设置为默认 this.viewNameTranslator.getViewName(request)
+
+结果是为null，所以不会经过render视图这一步
+
+最后将拦截器链的afterCompletion 结束
+
+总结：
+1、说明通过设置DispatcherServlet的throwExceptionIfNoHandlerFound属性为ture，并且重写DefaultHandlerExceptionResolver可以，特殊处理返回视图
+2、说明，只要视图有数据，那么就会根据方法名，去找对应的视图渲染，所以只要方法名写对了？就可以吗
+
+
+
+是的，ModelAndView中 view为String类型的returnNull1   --这步是如何处理的？returnNull1是pattern还是methodName?
+return null，在render时候判断如果view是string类型，会处理为真正的View，结果没处理成功，返回null，那么抛出异常
+
+throw new ServletException("Could not resolve view with name '" + mv.getViewName() +
+						"' in servlet with name '" + getServletName() + "'");
+
+
